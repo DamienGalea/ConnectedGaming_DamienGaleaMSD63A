@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Unity.Netcode;
 using UnityChess;
 using UnityEngine;
 
@@ -289,6 +290,7 @@ public class GameManager : MonoBehaviourSingleton<GameManager> {
 	/// <param name="movedPieceTransform">The transform of the moved piece.</param>
 	/// <param name="closestBoardSquareTransform">The transform of the closest board square.</param>
 	/// <param name="promotionPiece">Optional promotion piece (used in pawn promotion).</param>
+	
 	private async void OnPieceMoved(Square movedPieceInitialSquare, Transform movedPieceTransform, Transform closestBoardSquareTransform, Piece promotionPiece = null) {
 		// Determine the destination square based on the name of the closest board square transform.
 		Square endSquare = new Square(closestBoardSquareTransform.name);

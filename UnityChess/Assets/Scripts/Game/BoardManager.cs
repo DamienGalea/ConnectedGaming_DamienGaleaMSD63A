@@ -49,7 +49,7 @@ public class BoardManager : MonoBehaviourSingleton<BoardManager> {
 		// Subscribe to game events to update the board when a new game starts or when the game is reset.
 		GameManager.NewGameStartedEvent += OnNewGameStarted;
 		GameManager.GameResetToHalfMoveEvent += OnGameResetToHalfMove;
-
+		Debug.Log("BoardMa awale");
 		
 	}
 
@@ -168,28 +168,46 @@ public class BoardManager : MonoBehaviourSingleton<BoardManager> {
 
         Vector3 spawnPosition = positionMap[position].transform.position;
 
-        // ✅ Instantiate without setting parent
+        
         GameObject pieceGO = Instantiate(prefab, spawnPosition, Quaternion.identity);
 
         NetworkObject netObj = pieceGO.GetComponent<NetworkObject>();
         netObj.Spawn(); // ✅ Spawn first!
-        
+
 
         // ✅ Only now it's safe to set the parent
         pieceGO.transform.SetParent(positionMap[position].transform);
         pieceGO.transform.localPosition = Vector3.zero;
 
+
+
     }
 
+    public GameObject GetSquareGOByName(string name)
+    {
+        foreach (var kvp in positionMap)
+        {
+            if (SquareToString(kvp.Key) == name)
+            {
+                return kvp.Value;
+            }
+        }
+
+        return null;
+    }
+
+    
 
 
-	/// <summary>
-	/// Retrieves all square GameObjects within a specified radius of a world-space position.
-	/// </summary>
-	/// <param name="squareGOs">A list to be populated with the found square GameObjects.</param>
-	/// <param name="positionWS">The world-space position to check around.</param>
-	/// <param name="radius">The radius within which to search.</param>
-	public void GetSquareGOsWithinRadius(List<GameObject> squareGOs, Vector3 positionWS, float radius) {
+
+
+    /// <summary>
+    /// Retrieves all square GameObjects within a specified radius of a world-space position.
+    /// </summary>
+    /// <param name="squareGOs">A list to be populated with the found square GameObjects.</param>
+    /// <param name="positionWS">The world-space position to check around.</param>
+    /// <param name="radius">The radius within which to search.</param>
+    public void GetSquareGOsWithinRadius(List<GameObject> squareGOs, Vector3 positionWS, float radius) {
 		// Compute the square of the radius for efficiency.
 		float radiusSqr = radius * radius;
 		// Iterate over all square GameObjects.
@@ -285,7 +303,23 @@ public class BoardManager : MonoBehaviourSingleton<BoardManager> {
 	public GameObject GetSquareGOByPosition(Square position) =>
 		Array.Find(allSquaresGO, go => go.name == SquareToString(position));
 
+    public Transform GetClosestTileTransform(Vector3 worldPos)
+    {
+        Transform closest = null;
+        float shortestDist = float.MaxValue;
 
+        foreach (GameObject square in allSquaresGO)
+        {
+            float dist = (square.transform.position - worldPos).sqrMagnitude;
+            if (dist < shortestDist)
+            {
+                shortestDist = dist;
+                closest = square.transform;
+            }
+        }
+
+        return closest;
+    }
 
 
     private GameObject GetPrefabForPiece(string modelName)

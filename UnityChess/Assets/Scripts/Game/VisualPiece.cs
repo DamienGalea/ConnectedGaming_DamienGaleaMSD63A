@@ -2,6 +2,7 @@
 using Unity.Netcode;
 using UnityChess;
 using UnityEngine;
+using UnityEngine.UIElements;
 using static UnityChess.SquareUtil;
 
 /// <summary>
@@ -53,10 +54,10 @@ public class VisualPiece : NetworkBehaviour
     }
 
     /// <summary>
-    /// Called when the user presses the mouse button over the piece.
-    /// Records the initial screen-space position of the piece.
-    /// </summary>
-    public void OnMouseDown()
+	/// Called when the user presses the mouse button over the piece.
+	/// Records the initial screen-space position of the piece.
+	/// </summary>
+	public void OnMouseDown()
     {
         if (enabled)
         {
@@ -81,60 +82,66 @@ public class VisualPiece : NetworkBehaviour
         }
     }
 
-
-   // [ServerRpc(RequireOwnership = false)]
-
-
     /// <summary>
     /// Called when the user releases the mouse button after dragging the piece.
     /// Determines the closest board square to the piece and raises an event with the move.
     /// </summary>
     public void OnMouseUp()
     {
-        MouseUp();
-    }
-
-
-    public void MouseUp()
-    {
-         if (enabled)
+        if (BoardManager.Instance == null)
         {
-            // Clear any previous potential landing square candidates.
-            potentialLandingSquares.Clear();
-            // Obtain all square GameObjects within the collision radius of the piece's current position.
-            BoardManager.Instance.GetSquareGOsWithinRadius(potentialLandingSquares, thisTransform.position, SquareCollisionRadius);
-
-            // If no squares are found, assume the piece was moved off the board and reset its position.
-            if (potentialLandingSquares.Count == 0)
-            { // piece moved off board
-                thisTransform.position = thisTransform.parent.position;
-                return;
-            }
-
-            // Determine the closest square from the list of potential landing squares.
-            Transform closestSquareTransform = potentialLandingSquares[0].transform;
-            // Calculate the square of the distance between the piece and the first candidate square.
-            float shortestDistanceFromPieceSquared = (closestSquareTransform.position - thisTransform.position).sqrMagnitude;
-
-            // Iterate through remaining potential squares to find the closest one.
-            for (int i = 1; i < potentialLandingSquares.Count; i++)
-            {
-                GameObject potentialLandingSquare = potentialLandingSquares[i];
-                // Calculate the squared distance from the piece to the candidate square.
-                float distanceFromPieceSquared = (potentialLandingSquare.transform.position - thisTransform.position).sqrMagnitude;
-
-                // If the current candidate is closer than the previous closest, update the closest square.
-                if (distanceFromPieceSquared < shortestDistanceFromPieceSquared)
-                {
-                    shortestDistanceFromPieceSquared = distanceFromPieceSquared;
-                    closestSquareTransform = potentialLandingSquare.transform;
-                }
-            }
-
-            // Raise the VisualPieceMoved event with the initial square, the piece's transform, and the closest square transform.
-            VisualPieceMoved?.Invoke(CurrentSquare, thisTransform, closestSquareTransform);
+            Debug.LogError("[CLIENT] BoardManager.Instance is null in VisualPiece");
+            return;
         }
+
+
+        potentialLandingSquares.Clear();
+        BoardManager.Instance.GetSquareGOsWithinRadius(potentialLandingSquares, thisTransform.position, SquareCollisionRadius);
+
+        if (potentialLandingSquares.Count == 0)
+        {
+            thisTransform.position = thisTransform.parent.position;
+            return;
+        }
+
+        Transform closestSquareTransform = potentialLandingSquares[0].transform;
+        float shortestDistanceFromPieceSquared = (closestSquareTransform.position - thisTransform.position).sqrMagnitude;
+
+        for (int i = 1; i < potentialLandingSquares.Count; i++)
+        {
+            GameObject potentialLandingSquare = potentialLandingSquares[i];
+            float distanceFromPieceSquared = (potentialLandingSquare.transform.position - thisTransform.position).sqrMagnitude;
+
+            if (distanceFromPieceSquared < shortestDistanceFromPieceSquared)
+            {
+                shortestDistanceFromPieceSquared = distanceFromPieceSquared;
+                closestSquareTransform = potentialLandingSquare.transform;
+            }
+        }
+
+        // Client sends square name to server
+        RequestMoveServerRpc(closestSquareTransform.name);
     }
 
+    [ServerRpc(RequireOwnership = false)]
+    private void RequestMoveServerRpc(string squareName)
+    {
+        GameObject squareGO = BoardManager.Instance.GetSquareGOByName(squareName);
 
+        if (squareGO == null)
+        {
+            Debug.LogWarning($"[SERVER] Square {squareName} not found");
+            return;
+        }
+
+        thisTransform.SetParent(squareGO.transform);
+        thisTransform.localPosition = Vector3.zero;
+
+        VisualPieceMoved?.Invoke(CurrentSquare, thisTransform, squareGO.transform);
+    }
 }
+
+
+
+
+
