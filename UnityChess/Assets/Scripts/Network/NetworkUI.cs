@@ -41,6 +41,9 @@ public class NetworkUI : MonoBehaviour
         NetworkManager.Singleton.StartServer();
         Debug.Log($"Server started listening on {transport.ConnectionData.ServerListenAddress} and port {transport.ConnectionData.Port}");
         CheckIfRunningLocally();
+        BoardManager.Instance.SpawnTiles();
+        GameManager.Instance.StartNewGame();
+       
     }
 
     private void StartClient()
@@ -53,6 +56,8 @@ public class NetworkUI : MonoBehaviour
         NetworkManager.Singleton.StartHost();
         Debug.Log($"Server started listening on {transport.ConnectionData.ServerListenAddress} and port {transport.ConnectionData.Port}");
         CheckIfRunningLocally();
+        BoardManager.Instance.SpawnTiles();
+        GameManager.Instance.StartNewGame();
     }
 
     private void CheckIfRunningLocally()
@@ -105,4 +110,6 @@ public class NetworkUI : MonoBehaviour
     {
         Debug.LogWarning($"[Netcode] Client disconnected: {clientId}");
     }
+
+
 }

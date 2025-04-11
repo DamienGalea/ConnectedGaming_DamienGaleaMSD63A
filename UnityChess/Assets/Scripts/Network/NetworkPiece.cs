@@ -5,25 +5,21 @@ using Unity.Netcode;
 
 public class NetworkPiece : NetworkBehaviour
 {
-    public VisualPiece piece;   
-
-    public NetworkVariable<Vector3> syncedPosition = new(
-         writePerm: NetworkVariableWritePermission.Server
-     );
-
-    void Update()
+    public void Awake()
     {
-       
+        Debug.Log("dve");
     }
-
-    [ServerRpc(RequireOwnership = false)]
-    public void MovePieceServerRpc(Vector3 newPosition)
+    /*public override void OnNetworkSpawn()
     {
-        syncedPosition.Value = newPosition;
-        transform.position = newPosition;
-    }
+        Debug.Log("[BoardManager] OnNetworkSpawn triggered");
+        if (IsServer)
+        {
+            Debug.Log("[BoardManager] IsServer is TRUE — subscribing and starting game");
+            GameManager.Instance.StartNewGame();
 
-    
+        }
+    }*/
+
 
 }
 

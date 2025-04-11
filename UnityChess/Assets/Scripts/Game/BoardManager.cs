@@ -21,56 +21,87 @@ public class BoardManager : MonoBehaviourSingleton<BoardManager> {
 	// The vertical offset for placing the board (height above the base).
 	private const float BoardHeight = 1.6f;
 
+	[SerializeField] private GameObject tilePrefab;
+
+
+   //Getting the prefabs
+   [Header("Piece Prefabs")]
+    public GameObject whitePawnPrefab;
+    public GameObject blackPawnPrefab;
+    public GameObject whiteKnightPrefab;
+    public GameObject blackKnightPrefab;
+    public GameObject whiteBishopPrefab;
+    public GameObject blackBishopPrefab;
+    public GameObject whiteRookPrefab;
+    public GameObject blackRookPrefab;
+    public GameObject whiteQueenPrefab;
+    public GameObject blackQueenPrefab;
+    public GameObject whiteKingPrefab;
+    public GameObject blackKingPrefab;
+
+
 	/// <summary>
 	/// Awake is called when the script instance is being loaded.
 	/// Sets up the board, subscribes to game events, and creates the square GameObjects.
 	/// </summary>
-	private void Awake() {
+	private void Awake()
+	{
 		// Subscribe to game events to update the board when a new game starts or when the game is reset.
 		GameManager.NewGameStartedEvent += OnNewGameStarted;
 		GameManager.GameResetToHalfMoveEvent += OnGameResetToHalfMove;
-		
-		// Initialise the dictionary to map board squares to GameObjects.
-		positionMap = new Dictionary<Square, GameObject>(64);
-		// Get the transform of the board.
-		Transform boardTransform = transform;
-		// Store the board's position.
-		Vector3 boardPosition = boardTransform.position;
-		
-		// Loop over files (columns) and ranks (rows) to create each square.
-		for (int file = 1; file <= 8; file++) {
-			for (int rank = 1; rank <= 8; rank++) {
-				// Create a new GameObject for the square with its name based on chess notation.
-				GameObject squareGO = new GameObject(SquareToString(file, rank)) {
-					// Set the position of the square relative to the board's position.
-					transform = {
-						position = new Vector3(
-							boardPosition.x + FileOrRankToSidePosition(file),
-							boardPosition.y + BoardHeight,
-							boardPosition.z + FileOrRankToSidePosition(rank)
-						),
-						parent = boardTransform // Make the square a child of the board.
-					},
-					// Tag the GameObject as "Square" for identification.
-					tag = "Square"
-				};
-				squareGO.AddComponent<NetworkObject>();
 
-				// Add the square and its GameObject to the position map.
-				positionMap.Add(new Square(file, rank), squareGO);
-				// Store the square GameObject in the array at the corresponding index.
-				allSquaresGO[(file - 1) * 8 + (rank - 1)] = squareGO;
-			}
-		}
+		
 	}
 
-	/// <summary>
-	/// Called when a new game is started.
-	/// Clears the board and places pieces according to the new game state.
-	/// </summary>
-	private void OnNewGameStarted() {
-		// Remove all existing visual pieces.
-		ClearBoard();
+    public void SpawnTiles()
+    {
+        positionMap = new Dictionary<Square, GameObject>(64);
+        Transform boardTransform = transform;
+        Vector3 boardPosition = boardTransform.position;
+
+        for (int file = 1; file <= 8; file++)
+        {
+            for (int rank = 1; rank <= 8; rank++)
+            {
+                GameObject squareGO = Instantiate(tilePrefab); // ✅ tilePrefab has NetworkObject already
+                squareGO.name = SquareToString(file, rank);
+                squareGO.tag = "Square";
+
+                squareGO.transform.position = new Vector3(
+                    boardPosition.x + FileOrRankToSidePosition(file),
+                    boardPosition.y + BoardHeight,
+                    boardPosition.z + FileOrRankToSidePosition(rank)
+                );
+
+                // ✅ Spawn BEFORE reparenting!
+                if (NetworkManager.Singleton.IsServer)
+                {
+                    var netObj = squareGO.GetComponent<NetworkObject>();
+                    if (netObj != null && !netObj.IsSpawned)
+                        netObj.Spawn();
+                }
+
+                // ✅ Safe to set parent now
+                squareGO.transform.SetParent(boardTransform);
+
+                positionMap.Add(new Square(file, rank), squareGO);
+                allSquaresGO[(file - 1) * 8 + (rank - 1)] = squareGO;
+            }
+        }
+    }
+
+
+
+    /// <summary>
+    /// Called when a new game is started.
+    /// Clears the board and places pieces according to the new game state.
+    /// </summary>
+    private void OnNewGameStarted() {
+
+        if (!NetworkManager.Singleton.IsServer) return;
+
+        // Remove all existing visual pieces.
+        ClearBoard();
 		
 		// Iterate through all current pieces and create their GameObjects at the correct positions.
 		foreach ((Square square, Piece piece) in GameManager.Instance.CurrentPieces) {
@@ -125,17 +156,32 @@ public class BoardManager : MonoBehaviourSingleton<BoardManager> {
 	/// <param name="piece">The chess piece to display.</param>
 	/// <param name="position">The board square where the piece should be placed.</param>
 	public void CreateAndPlacePieceGO(Piece piece, Square position) {
-		// Construct the model name based on the piece's owner and type.
-		string modelName = $"{piece.Owner} {piece.GetType().Name}";
-		// Instantiate the piece GameObject from the corresponding resource.
-		GameObject pieceGO = Instantiate(
-			Resources.Load("PieceSets/Marble/" + modelName) as GameObject,
-			positionMap[position].transform
-		);
 
+        string modelName = $"{piece.Owner} {piece.GetType().Name}";
+        GameObject prefab = GetPrefabForPiece(modelName);
 
-       
+        if (prefab == null)
+        {
+            Debug.LogError($"[BoardManager] Missing prefab for {modelName}");
+            return;
+        }
+
+        Vector3 spawnPosition = positionMap[position].transform.position;
+
+        // ✅ Instantiate without setting parent
+        GameObject pieceGO = Instantiate(prefab, spawnPosition, Quaternion.identity);
+
+        NetworkObject netObj = pieceGO.GetComponent<NetworkObject>();
+        netObj.Spawn(); // ✅ Spawn first!
+        
+
+        // ✅ Only now it's safe to set the parent
+        pieceGO.transform.SetParent(positionMap[position].transform);
+        pieceGO.transform.localPosition = Vector3.zero;
+
     }
+
+
 
 	/// <summary>
 	/// Retrieves all square GameObjects within a specified radius of a world-space position.
@@ -238,4 +284,29 @@ public class BoardManager : MonoBehaviourSingleton<BoardManager> {
 	/// <returns>The corresponding square GameObject.</returns>
 	public GameObject GetSquareGOByPosition(Square position) =>
 		Array.Find(allSquaresGO, go => go.name == SquareToString(position));
+
+
+
+
+    private GameObject GetPrefabForPiece(string modelName)
+    {
+        return modelName switch
+        {
+            "White Pawn" => whitePawnPrefab,
+            "Black Pawn" => blackPawnPrefab,
+            "White Knight" => whiteKnightPrefab,
+            "Black Knight" => blackKnightPrefab,
+            "White Bishop" => whiteBishopPrefab,
+            "Black Bishop" => blackBishopPrefab,
+            "White Rook" => whiteRookPrefab,
+            "Black Rook" => blackRookPrefab,
+            "White Queen" => whiteQueenPrefab,
+            "Black Queen" => blackQueenPrefab,
+            "White King" => whiteKingPrefab,
+            "Black King" => blackKingPrefab,
+            _ => null
+        };
+    }
+
+
 }
