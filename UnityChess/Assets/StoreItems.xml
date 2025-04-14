@@ -1,0 +1,36 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<ArrayOfStoreItem xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <StoreItem>
+    <ID>2de10744</ID>
+    <Name>profile 1</Name>
+    <ThumbnailUrl>dlc/profile1.png</ThumbnailUrl>
+    <Price>90</Price>
+    <Discount>10</Discount>
+    <ThumbnailImage>
+      <name>pixelated_image_1</name>
+      <hideFlags>None</hideFlags>
+    </ThumbnailImage>
+  </StoreItem>
+  <StoreItem>
+    <ID>db4b22ed</ID>
+    <Name>profile 2</Name>
+    <ThumbnailUrl>dlc/profile2.png</ThumbnailUrl>
+    <Price>80</Price>
+    <Discount>0</Discount>
+    <ThumbnailImage>
+      <name>pixelated_image_2</name>
+      <hideFlags>None</hideFlags>
+    </ThumbnailImage>
+  </StoreItem>
+  <StoreItem>
+    <ID>af8be749</ID>
+    <Name>profile 3</Name>
+    <ThumbnailUrl>dlc/profile3.png</ThumbnailUrl>
+    <Price>70</Price>
+    <Discount>0</Discount>
+    <ThumbnailImage>
+      <name>pixelated_image_3</name>
+      <hideFlags>None</hideFlags>
+    </ThumbnailImage>
+  </StoreItem>
+</ArrayOfStoreItem>

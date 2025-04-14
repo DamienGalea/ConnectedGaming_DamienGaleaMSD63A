@@ -292,4 +292,17 @@ public class UIManager : MonoBehaviourSingleton<UIManager> {
 	/// Updates the game string input field with the current serialized game state.
 	/// </summary>
 	private void UpdateGameStringInputField() => GameStringInputField.text = GameManager.Instance.SerializeGame();
+
+
+    public void ShowPurchaseMessage(string message)
+    {
+        resultText.text = message;
+        resultText.gameObject.SetActive(true);
+        Invoke(nameof(HideMessage), 3f);
+    }
+
+    private void HideMessage()
+    {
+        resultText.gameObject.SetActive(false);
+    }
 }
