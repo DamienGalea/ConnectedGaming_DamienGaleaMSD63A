@@ -17,11 +17,13 @@ public class GameManager : MonoBehaviourSingleton<GameManager> {
 	public static event Action GameEndedEvent;
 	public static event Action GameResetToHalfMoveEvent;
 	public static event Action MoveExecutedEvent;
-	
-	/// <summary>
-	/// Gets the current board state from the game.
-	/// </summary>
-	public Board CurrentBoard {
+
+	private Side clientSideToMove = Side.White;
+
+    /// <summary>
+    /// Gets the current board state from the game.
+    /// </summary>
+    public Board CurrentBoard {
 		get {
 			// Attempts to retrieve the current board from the board timeline.
 			game.BoardTimeline.TryGetCurrent(out Board currentBoard);
@@ -29,21 +31,37 @@ public class GameManager : MonoBehaviourSingleton<GameManager> {
 		}
 	}
 
-	/// <summary>
-	/// Gets the side (White/Black) whose turn it is to move.
-	/// </summary>
-	public Side SideToMove {
-		get {
-			// Retrieves the current game conditions and returns the active side.
-			game.ConditionsTimeline.TryGetCurrent(out GameConditions currentConditions);
-			return currentConditions.SideToMove;
-		}
-	}
+    /// <summary>
+    /// Gets the side (White/Black) whose turn it is to move.
+    /// </summary>
+    public Side SideToMove
+    {
+        get
+        {
+            if (NetworkManager.Singleton.IsServer)
+            {
+                if (game == null || !game.ConditionsTimeline.TryGetCurrent(out GameConditions currentConditions))
+                {
+                    Debug.LogWarning("[GameManager] SideToMove is not available yet.");
+                    return Side.White;
+                }
+                return currentConditions.SideToMove;
+            }
 
-	/// <summary>
-	/// Gets the side that started the game.
-	/// </summary>
-	public Side StartingSide => game.ConditionsTimeline[0].SideToMove;
+            return clientSideToMove; // use synced value on client
+        }
+    }
+
+    public void SetClientSideToMove(Side side)
+    {
+        clientSideToMove = side;
+    }
+
+
+    /// <summary>
+    /// Gets the side that started the game.
+    /// </summary>
+    public Side StartingSide => game.ConditionsTimeline[0].SideToMove;
 	
 	/// <summary>
 	/// Gets the timeline of half-moves made in the game.
@@ -92,7 +110,7 @@ public class GameManager : MonoBehaviourSingleton<GameManager> {
 	// Reference to the debug utility for the chess engine.
 	[SerializeField] private UnityChessDebug unityChessDebug;
 	// The current game instance.
-	private Game game;
+	public Game game;
 	// Serializers for game state (FEN and PGN formats).
 	private FENSerializer fenSerializer;
 	private PGNSerializer pgnSerializer;
@@ -170,41 +188,49 @@ public class GameManager : MonoBehaviourSingleton<GameManager> {
 		GameResetToHalfMoveEvent?.Invoke();
 	}
 
-	/// <summary>
-	/// Attempts to execute a given move in the game.
-	/// </summary>
-	/// <param name="move">The move to execute.</param>
-	/// <returns>True if the move was successfully executed; otherwise, false.</returns>
-	private bool TryExecuteMove(Movement move) {
-		// Attempt to execute the move within the game logic.
-		if (!game.TryExecuteMove(move)) {
-			return false;
-		}
+    /// <summary>
+    /// Attempts to execute a given move in the game.
+    /// </summary>
+    /// <param name="move">The move to execute.</param>
+    /// <returns>True if the move was successfully executed; otherwise, false.</returns>
+    public bool TryExecuteMove(Movement move)
+    {
+        // Attempt to execute the move within the game logic.
+        if (!game.TryExecuteMove(move))
+        {
+            return false;
+        }
 
-		// Retrieve the latest half-move from the timeline.
-		HalfMoveTimeline.TryGetCurrent(out HalfMove latestHalfMove);
-		
-		// If the latest move resulted in checkmate or stalemate, disable further moves.
-		if (latestHalfMove.CausedCheckmate || latestHalfMove.CausedStalemate) {
-			BoardManager.Instance.SetActiveAllPieces(false);
-			GameEndedEvent?.Invoke();
-		} else {
-			// Otherwise, ensure that only the pieces of the side to move are enabled.
-			BoardManager.Instance.EnsureOnlyPiecesOfSideAreEnabled(SideToMove);
-		}
+        // Retrieve the latest half-move from the timeline.
+        HalfMoveTimeline.TryGetCurrent(out HalfMove latestHalfMove);
 
-		// Signal that a move has been executed.
-		MoveExecutedEvent?.Invoke();
+        // If the latest move resulted in checkmate or stalemate, disable further moves.
+        if (latestHalfMove.CausedCheckmate || latestHalfMove.CausedStalemate)
+        {
+            BoardManager.Instance.SetActiveAllPieces(false);
+            GameEndedEvent?.Invoke();
+        }
+        else
+        {
+            // Otherwise, ensure that only the pieces of the side to move are enabled.
+            BoardManager.Instance.EnsureOnlyPiecesOfSideAreEnabled(SideToMove);
+        }
 
-		return true;
-	}
-	
-	/// <summary>
-	/// Handles special move behaviour asynchronously (castling, en passant, and promotion).
-	/// </summary>
-	/// <param name="specialMove">The special move to process.</param>
-	/// <returns>A task that resolves to true if the special move was handled; otherwise, false.</returns>
-	private async Task<bool> TryHandleSpecialMoveBehaviourAsync(SpecialMove specialMove) {
+        // Signal that a move has been executed.
+        MoveExecutedEvent?.Invoke();
+
+        // ✅ Sync turn visuals and logic to clients
+        NetworkText.Instance.NotifyTurnChangedClientRpc(SideToMove);     // Updates UI
+        NetworkText.Instance.SetClientTurnClientRpc(SideToMove);         // Updates logic
+
+        return true;
+    }
+    /// <summary>
+    /// Handles special move behaviour asynchronously (castling, en passant, and promotion).
+    /// </summary>
+    /// <param name="specialMove">The special move to process.</param>
+    /// <returns>A task that resolves to true if the special move was handled; otherwise, false.</returns>
+    private async Task<bool> TryHandleSpecialMoveBehaviourAsync(SpecialMove specialMove) {
 		switch (specialMove) {
 			// Handle castling move.
 			case CastlingMove castlingMove:
@@ -291,7 +317,7 @@ public class GameManager : MonoBehaviourSingleton<GameManager> {
 	/// <param name="closestBoardSquareTransform">The transform of the closest board square.</param>
 	/// <param name="promotionPiece">Optional promotion piece (used in pawn promotion).</param>
 	
-	private async void OnPieceMoved(Square movedPieceInitialSquare, Transform movedPieceTransform, Transform closestBoardSquareTransform, Piece promotionPiece = null) {
+	public async void OnPieceMoved(Square movedPieceInitialSquare, Transform movedPieceTransform, Transform closestBoardSquareTransform, Piece promotionPiece = null) {
 		// Determine the destination square based on the name of the closest board square transform.
 		Square endSquare = new Square(closestBoardSquareTransform.name);
 
@@ -341,5 +367,5 @@ public class GameManager : MonoBehaviourSingleton<GameManager> {
 		return game.TryGetLegalMovesForPiece(piece, out _);
 	}
 
-
+   
 }

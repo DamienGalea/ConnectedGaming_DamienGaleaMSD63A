@@ -49,12 +49,12 @@ public class NetworkImageApply : NetworkBehaviour
     // Called by local player when they want to set their profile image
     public void SetProfileImageLocallyAndSync(string fileName)
     {
-        Debug.Log($"📢 IsSpawned: {IsSpawned}");
+        Debug.Log($"IsSpawned: {IsSpawned}");
         string path = Path.Combine(Application.persistentDataPath, fileName);
         
         if (!File.Exists(path))
         {
-            Debug.LogWarning("❌ File not found: " + path);
+            Debug.LogWarning("File not found: " + path);
             return;
         }
 
@@ -64,7 +64,7 @@ public class NetworkImageApply : NetworkBehaviour
         Texture2D resized = ResizeTexture(original, 128, 128); // Resize to 128x128
         byte[] imageBytes = resized.EncodeToPNG(); // Compress image to PNG
 
-        Debug.Log($"📦 Compressed image size: {imageBytes.Length} bytes");
+        Debug.Log($"Compressed image size: {imageBytes.Length} bytes");
 
         ApplyTexture(imageBytes, NetworkManager.Singleton.LocalClientId);
         ApplyTexture(imageBytes, NetworkManager.Singleton.LocalClientId);
@@ -94,7 +94,7 @@ public class NetworkImageApply : NetworkBehaviour
     {
        
 
-        Debug.Log($"📨 Client {NetworkManager.Singleton.LocalClientId} received image from {targetClientId}");
+        Debug.Log($"Client {NetworkManager.Singleton.LocalClientId} received image from {targetClientId}");
 
         ApplyTexture(imageData, targetClientId);
     }
@@ -107,16 +107,16 @@ public class NetworkImageApply : NetworkBehaviour
         if (clientId == 0 && rawImagePlayer0 != null)
         {
             rawImagePlayer0.texture = texture;
-            Debug.Log("🖼️ Set Player 0's profile image");
+            Debug.Log("Set Player 0's profile image");
         }
         else if (clientId == 1 && rawImagePlayer1 != null)
         {
             rawImagePlayer1.texture = texture;
-            Debug.Log("🖼️ Set Player 1's profile image");
+            Debug.Log("Set Player 1's profile image");
         }
         else
         {
-            Debug.LogWarning("⚠️ Unknown client ID: " + clientId);
+            Debug.LogWarning("Unknown client ID: " + clientId);
         }
     }
 

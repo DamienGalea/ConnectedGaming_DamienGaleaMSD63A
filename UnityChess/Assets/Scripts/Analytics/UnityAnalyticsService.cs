@@ -18,12 +18,13 @@ public class UnityAnalyticsService : MonoBehaviour
         AnalyticsService.Instance.StartDataCollection();
     }
 
-    public void RecordPlayerStepOverEvent(int tileId)
+    public void RecordPurchaseEvent (string item)
     {
-        PlayerStepOver myEvent = new PlayerStepOver
+        PlayerPurchase myEvent = new PlayerPurchase
         {
-            GameObjectId = tileId,
+            item_name = item,
         };
         AnalyticsService.Instance.RecordEvent(myEvent);
+        Debug.Log("Item recded");
     }
 }

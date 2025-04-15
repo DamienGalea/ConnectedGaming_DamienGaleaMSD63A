@@ -1,6 +1,7 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -19,10 +20,12 @@ public class SetImageBtn : MonoBehaviour
         if (manager != null)
         {
             manager.SetProfileImageLocallyAndSync(downloadedFileName);
+
+            UIManager.Instance.ShowPurchaseMessage("Player is using a new profile picture");
         }
         else
         {
-            //Debug.LogError("❌ No NetworkProfileImageManager found in scene!");
+            //Debug.LogError("No NetworkProfileImageManager found in scene!");
             SetProfileImageLocally(downloadedFileName, targetRawImage);
         }
 

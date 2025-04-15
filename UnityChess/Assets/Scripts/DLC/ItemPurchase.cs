@@ -13,6 +13,8 @@ public class ItemPurchase: MonoBehaviour
     public Button SetBtn;
     public TMP_Text PurchaseText;
 
+    FirestoreService firestore;
+
     public void Start()
     {
         GameObject target = GameObject.Find("Purchase");
@@ -20,6 +22,8 @@ public class ItemPurchase: MonoBehaviour
 
         SetBtn.interactable = false;
         priceManager = FindObjectOfType<PriceManager>();
+
+        firestore = FindObjectOfType<FirestoreService>();
 
     }
     public void DownloadItem()
@@ -31,7 +35,7 @@ public class ItemPurchase: MonoBehaviour
 
             if (Item == null || string.IsNullOrEmpty(Item.ThumbnailUrl))
             {
-                Debug.LogError("❌ Missing item or URL.");
+                Debug.LogError("Missing item or URL.");
                 return;
             }
 
@@ -52,10 +56,10 @@ public class ItemPurchase: MonoBehaviour
                 NetworkText.Instance.ShowPurchaseMessageClientRpc(NetworkManager.Singleton.LocalClientId, Item.Name);
             }
 
-           
+            UnityAnalyticsService.Instance.RecordPurchaseEvent(Item.Name);
 
-            if (FirestoreService.Instance != null) {
-                FirestoreService.Instance.LogAction($"{Item.Name} was downloaded");
+            if (firestore != null) {
+                firestore.LogAction($"{Item.Name} was downloaded");
             }
             else
             {

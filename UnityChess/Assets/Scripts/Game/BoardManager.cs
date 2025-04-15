@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using Unity.Netcode;
 using UnityChess;
@@ -11,7 +12,7 @@ using static UnityChess.SquareUtil;
 /// </summary>
 public class BoardManager : MonoBehaviourSingleton<BoardManager> {
 	// Array holding references to all square GameObjects (64 squares for an 8x8 board).
-	private readonly GameObject[] allSquaresGO = new GameObject[64];
+	public readonly GameObject[] allSquaresGO = new GameObject[64];
 	// Dictionary mapping board squares to their corresponding GameObjects.
 	private Dictionary<Square, GameObject> positionMap;
 	// Constant representing the side length of the board plane (from centre to centre of corner squares).
@@ -23,9 +24,17 @@ public class BoardManager : MonoBehaviourSingleton<BoardManager> {
 
 	[SerializeField] private GameObject tilePrefab;
 
+	
 
-   //Getting the prefabs
-   [Header("Piece Prefabs")]
+
+    [SerializeField] private GameObject whiteIndicator;
+    [SerializeField] private GameObject blackIndicator;
+    
+
+
+
+    //Getting the prefabs
+    [Header("Piece Prefabs")]
     public GameObject whitePawnPrefab;
     public GameObject blackPawnPrefab;
     public GameObject whiteKnightPrefab;
@@ -46,16 +55,26 @@ public class BoardManager : MonoBehaviourSingleton<BoardManager> {
 	/// </summary>
 	private void Awake()
 	{
-		// Subscribe to game events to update the board when a new game starts or when the game is reset.
-		GameManager.NewGameStartedEvent += OnNewGameStarted;
+       
+
+        // Subscribe to game events to update the board when a new game starts or when the game is reset.
+        GameManager.NewGameStartedEvent += OnNewGameStarted;
 		GameManager.GameResetToHalfMoveEvent += OnGameResetToHalfMove;
 		Debug.Log("BoardMa awale");
-		
-	}
+       
 
+    }
+
+
+    
+
+   
     public void SpawnTiles()
     {
+        
+
         positionMap = new Dictionary<Square, GameObject>(64);
+
         Transform boardTransform = transform;
         Vector3 boardPosition = boardTransform.position;
 
@@ -63,7 +82,7 @@ public class BoardManager : MonoBehaviourSingleton<BoardManager> {
         {
             for (int rank = 1; rank <= 8; rank++)
             {
-                GameObject squareGO = Instantiate(tilePrefab); // ✅ tilePrefab has NetworkObject already
+                GameObject squareGO = Instantiate(tilePrefab);
                 squareGO.name = SquareToString(file, rank);
                 squareGO.tag = "Square";
 
@@ -73,22 +92,43 @@ public class BoardManager : MonoBehaviourSingleton<BoardManager> {
                     boardPosition.z + FileOrRankToSidePosition(rank)
                 );
 
-                // ✅ Spawn BEFORE reparenting!
-                if (NetworkManager.Singleton.IsServer)
-                {
-                    var netObj = squareGO.GetComponent<NetworkObject>();
-                    if (netObj != null && !netObj.IsSpawned)
-                        netObj.Spawn();
-                }
+                var netObj = squareGO.GetComponent<NetworkObject>();
+                if (netObj != null && !netObj.IsSpawned)
+                    netObj.Spawn();
+                else if (netObj == null)
+                    Debug.LogError($"[BoardManager] NetworkObject missing on tile: {squareGO.name}");
 
-                // ✅ Safe to set parent now
+                // Parent AFTER spawn
                 squareGO.transform.SetParent(boardTransform);
 
-                positionMap.Add(new Square(file, rank), squareGO);
-                allSquaresGO[(file - 1) * 8 + (rank - 1)] = squareGO;
+                Square square = new Square(file, rank);
+                positionMap[square] = squareGO;
+
+                int arrayIndex = (file - 1) * 8 + (rank - 1);
+                if (arrayIndex >= 0 && arrayIndex < allSquaresGO.Length)
+                {
+                    allSquaresGO[arrayIndex] = squareGO;
+                }
+                else
+                {
+                    Debug.LogWarning($"[BoardManager] Invalid array index {arrayIndex} for {squareGO.name}");
+                }
+
+                if (squareGO == null)
+                    Debug.LogError($"[BoardManager] squareGO is NULL at {file}, {rank}");
+                else
+                    Debug.Log($"[BoardManager] Created: {squareGO.name}");
             }
         }
     }
+
+
+
+
+
+
+
+
 
 
 
@@ -168,35 +208,63 @@ public class BoardManager : MonoBehaviourSingleton<BoardManager> {
 
         Vector3 spawnPosition = positionMap[position].transform.position;
 
-        
         GameObject pieceGO = Instantiate(prefab, spawnPosition, Quaternion.identity);
-
         NetworkObject netObj = pieceGO.GetComponent<NetworkObject>();
-        netObj.Spawn(); // ✅ Spawn first!
 
+        Transform parentTransform = parentTransform = positionMap[position].transform;
 
-        // ✅ Only now it's safe to set the parent
-        pieceGO.transform.SetParent(positionMap[position].transform);
-        pieceGO.transform.localPosition = Vector3.zero;
+        if (NetworkManager.Singleton.IsServer)
+        {
+            //Assign ownership based on piece side
+            ulong ownerId = piece.Owner == Side.White
+                ? NetworkManager.ServerClientId
+                : NetworkUI.BlackPlayerClientId;
 
+            netObj.SpawnWithOwnership(ownerId);
 
+            //Only set parent after spawning
+         
+            pieceGO.transform.SetParent(parentTransform);
+            pieceGO.transform.localPosition = Vector3.zero;
+        }
+        else
+        {
+            StartCoroutine(DelayedParent(pieceGO.transform, parentTransform, position));
+        }
+
+        VisualPiece visualPiece = pieceGO.GetComponent<VisualPiece>();
+        if (visualPiece != null)
+        {
+            visualPiece.PieceColor = piece.Owner;
+        }
 
     }
 
-    public GameObject GetSquareGOByName(string name)
+    private IEnumerator DelayedParent(Transform piece, Transform targetParent, Square position)
+    {
+        yield return new WaitUntil(() => targetParent != null && targetParent.gameObject.activeInHierarchy);
+
+        piece.SetParent(targetParent);
+        piece.localPosition = Vector3.zero;
+
+        Debug.Log($"[Client] Piece parented under {position}");
+    }
+
+
+
+    public Square GetSquareFromTransform(Transform tileTransform)
     {
         foreach (var kvp in positionMap)
         {
-            if (SquareToString(kvp.Key) == name)
-            {
-                return kvp.Value;
-            }
+            if (kvp.Value.transform == tileTransform)
+                return kvp.Key;
         }
 
-        return null;
+        Debug.LogWarning("[BoardManager] Couldn't find square for transform!");
+        return default;
     }
 
-    
+
 
 
 
@@ -212,8 +280,15 @@ public class BoardManager : MonoBehaviourSingleton<BoardManager> {
 		float radiusSqr = radius * radius;
 		// Iterate over all square GameObjects.
 		foreach (GameObject squareGO in allSquaresGO) {
-			// If the square is within the radius, add it to the provided list.
-			if ((squareGO.transform.position - positionWS).sqrMagnitude < radiusSqr)
+
+            if (squareGO == null)
+            {
+                Debug.LogWarning("[BoardManager] Null square in allSquaresGO");
+                continue;
+            }
+
+            // If the square is within the radius, add it to the provided list.
+            if ((squareGO.transform.position - positionWS).sqrMagnitude < radiusSqr)
 				squareGOs.Add(squareGO);
 		}
 	}
@@ -244,14 +319,29 @@ public class BoardManager : MonoBehaviourSingleton<BoardManager> {
 			// Enable the piece only if it belongs to the specified side and has legal moves.
 			pieceBehaviour.enabled = pieceBehaviour.PieceColor == side
 			                         && GameManager.Instance.HasLegalMoves(piece);
-		}
-	}
 
-	/// <summary>
-	/// Destroys the visual representation of a piece at the specified square.
-	/// </summary>
-	/// <param name="position">The board square from which to destroy the piece.</param>
-	public void TryDestroyVisualPiece(Square position) {
+
+		}
+
+        UpdateTurnIndicators(side);
+    }
+
+
+    public void UpdateTurnIndicators(Side currentTurn)
+    {
+        bool isWhiteTurn = currentTurn == Side.White;
+
+
+        whiteIndicator.SetActive(isWhiteTurn);
+
+        blackIndicator.SetActive(!isWhiteTurn);
+    }
+
+    /// <summary>
+    /// Destroys the visual representation of a piece at the specified square.
+    /// </summary>
+    /// <param name="position">The board square from which to destroy the piece.</param>
+    public void TryDestroyVisualPiece(Square position) {
 		// Find the VisualPiece component within the square's GameObject.
 		VisualPiece visualPiece = positionMap[position].GetComponentInChildren<VisualPiece>();
 		// If a VisualPiece is found, destroy its GameObject immediately.

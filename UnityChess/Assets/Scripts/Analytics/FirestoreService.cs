@@ -16,24 +16,29 @@ public class FirestoreService : MonoBehaviour
 
     private void Awake()
     {
-        if (Instance != null && Instance != this)
+        /*if (Instance != null && Instance != this)
         {
             Destroy(gameObject);
             return;
         }
-        Instance = this;
+        Instance = this;*/
     }
 
     private void Start()
     {
 
         _db = FirebaseFirestore.DefaultInstance;
-        
-        _userId = GetPlayerId();
+
+        _userId = GenerateRandomPlayerId();
         LogAction("Player downlaoded a profile picture.");
     }
 
-    private string GetPlayerId()
+    public string GenerateRandomPlayerId()
+    {
+        return Guid.NewGuid().ToString();
+    }
+
+    /*private string GetPlayerId()
     {
         if (PlayerPrefs.HasKey("UserID"))
         {
@@ -43,7 +48,7 @@ public class FirestoreService : MonoBehaviour
         PlayerPrefs.SetString("UserID", _userId);
         PlayerPrefs.Save();
         return _userId;
-    }
+    }*/
 
     private void OnDestroy()
     {

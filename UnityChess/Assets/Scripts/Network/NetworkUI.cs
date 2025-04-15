@@ -1,10 +1,11 @@
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using Unity.Netcode;
 using UnityEngine.UI;
 using Unity.Netcode.Transports.UTP;
+using UnityChess;
 
 public class NetworkUI : MonoBehaviour
 {
@@ -12,6 +13,12 @@ public class NetworkUI : MonoBehaviour
     [SerializeField] private Button ClientButton;
     [SerializeField] private Button HostButton;
     private UnityTransport transport;
+
+    private Dictionary<ulong, string> playerSides = new Dictionary<ulong, string>();
+    public static ulong BlackPlayerClientId = ulong.MaxValue;
+
+   
+
     private void Awake()
     {
         ServerButton.onClick.AddListener(StartServer);
@@ -23,7 +30,7 @@ public class NetworkUI : MonoBehaviour
     {
         if (NetworkManager.Singleton != null)
         {
-            NetworkManager.Singleton.OnClientConnectedCallback += HandleClientConnected;
+           
             NetworkManager.Singleton.OnClientDisconnectCallback += HandleClientDisconnected;
         }
     }
@@ -32,7 +39,7 @@ public class NetworkUI : MonoBehaviour
     {
         if (NetworkManager.Singleton != null)
         {
-            NetworkManager.Singleton.OnClientConnectedCallback -= HandleClientConnected;
+           
             NetworkManager.Singleton.OnClientDisconnectCallback -= HandleClientDisconnected;
         }
     }
@@ -41,14 +48,29 @@ public class NetworkUI : MonoBehaviour
         NetworkManager.Singleton.StartServer();
         Debug.Log($"Server started listening on {transport.ConnectionData.ServerListenAddress} and port {transport.ConnectionData.Port}");
         CheckIfRunningLocally();
+        NetworkManager.Singleton.OnClientConnectedCallback += HandleClientConnected;
         BoardManager.Instance.SpawnTiles();
-        GameManager.Instance.StartNewGame();
-       
+        WaitForClientAndStartGame();
+
+
     }
 
+    private IEnumerator WaitForClientAndStartGame()
+    {
+        Debug.Log("[NetworkUI] Waiting for client before starting game...");
+
+        yield return new WaitUntil(() => NetworkManager.Singleton.ConnectedClients.Count >= 2 && BlackPlayerClientId != ulong.MaxValue);
+
+        BoardManager.Instance.SpawnTiles();
+        GameManager.Instance.StartNewGame();
+
+        Debug.Log("[NetworkUI] Game started after both players connected.");
+    }
     private void StartClient()
     {
         NetworkManager.Singleton.StartClient();
+        NetworkManager.Singleton.OnClientConnectedCallback += HandleClientConnected;
+       
     }
 
     private void StartHost()
@@ -56,6 +78,7 @@ public class NetworkUI : MonoBehaviour
         NetworkManager.Singleton.StartHost();
         Debug.Log($"Server started listening on {transport.ConnectionData.ServerListenAddress} and port {transport.ConnectionData.Port}");
         CheckIfRunningLocally();
+        NetworkManager.Singleton.OnClientConnectedCallback += HandleClientConnected;
         BoardManager.Instance.SpawnTiles();
         GameManager.Instance.StartNewGame();
     }
@@ -99,6 +122,13 @@ public class NetworkUI : MonoBehaviour
         if (NetworkManager.Singleton.IsServer)
         {
             Debug.Log($"[SERVER] Total clients: {NetworkManager.Singleton.ConnectedClients.Count}");
+
+            // Assign the first non-host client as the black player
+            if (clientId != NetworkManager.ServerClientId && BlackPlayerClientId == ulong.MaxValue)
+            {
+                BlackPlayerClientId = clientId;
+                Debug.Log($"[NetworkUI] Assigned black pieces to client: {clientId}");
+            }
         }
         else
         {
@@ -109,6 +139,25 @@ public class NetworkUI : MonoBehaviour
     private void HandleClientDisconnected(ulong clientId)
     {
         Debug.LogWarning($"[Netcode] Client disconnected: {clientId}");
+    }
+
+    private IEnumerator MonitorClientConnection()
+    {
+        float timeout = 5f;
+        float elapsed = 0f;
+
+        while (!NetworkManager.Singleton.IsConnectedClient && elapsed < timeout)
+        {
+            elapsed += Time.deltaTime;
+            yield return null;
+        }
+
+        if (!NetworkManager.Singleton.IsConnectedClient)
+        {
+            Debug.LogError("Failed to connect to server.");
+            NetworkText.Instance.ShowConnectionFaliureClientRpc();
+            NetworkManager.Singleton.Shutdown();
+        }
     }
 
 

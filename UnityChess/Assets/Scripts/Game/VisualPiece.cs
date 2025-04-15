@@ -54,10 +54,10 @@ public class VisualPiece : NetworkBehaviour
     }
 
     /// <summary>
-	/// Called when the user presses the mouse button over the piece.
-	/// Records the initial screen-space position of the piece.
-	/// </summary>
-	public void OnMouseDown()
+    /// Called when the user presses the mouse button over the piece.
+    /// Records the initial screen-space position of the piece.
+    /// </summary>
+    public void OnMouseDown()
     {
         if (enabled)
         {
@@ -88,58 +88,54 @@ public class VisualPiece : NetworkBehaviour
     /// </summary>
     public void OnMouseUp()
     {
-        if (BoardManager.Instance == null)
+        Side mySide = NetworkManager.Singleton.IsHost ? Side.White : Side.Black;
+
+        if (GameManager.Instance.SideToMove != mySide)
         {
-            Debug.LogError("[CLIENT] BoardManager.Instance is null in VisualPiece");
+            Debug.Log($"[CLIENT] Not your turn: {GameManager.Instance.SideToMove}'s turn.");
             return;
         }
 
 
-        potentialLandingSquares.Clear();
-        BoardManager.Instance.GetSquareGOsWithinRadius(potentialLandingSquares, thisTransform.position, SquareCollisionRadius);
-
-        if (potentialLandingSquares.Count == 0)
-        {
-            thisTransform.position = thisTransform.parent.position;
-            return;
-        }
-
-        Transform closestSquareTransform = potentialLandingSquares[0].transform;
-        float shortestDistanceFromPieceSquared = (closestSquareTransform.position - thisTransform.position).sqrMagnitude;
-
-        for (int i = 1; i < potentialLandingSquares.Count; i++)
-        {
-            GameObject potentialLandingSquare = potentialLandingSquares[i];
-            float distanceFromPieceSquared = (potentialLandingSquare.transform.position - thisTransform.position).sqrMagnitude;
-
-            if (distanceFromPieceSquared < shortestDistanceFromPieceSquared)
-            {
-                shortestDistanceFromPieceSquared = distanceFromPieceSquared;
-                closestSquareTransform = potentialLandingSquare.transform;
-            }
-        }
-
-        // Client sends square name to server
-        RequestMoveServerRpc(closestSquareTransform.name);
+        MoiseServerRpc();
     }
+
 
     [ServerRpc(RequireOwnership = false)]
-    private void RequestMoveServerRpc(string squareName)
-    {
-        GameObject squareGO = BoardManager.Instance.GetSquareGOByName(squareName);
+    public void MoiseServerRpc()
+     {
+            if (!enabled) return;
 
-        if (squareGO == null)
-        {
-            Debug.LogWarning($"[SERVER] Square {squareName} not found");
-            return;
+            potentialLandingSquares.Clear();
+            BoardManager.Instance.GetSquareGOsWithinRadius(potentialLandingSquares, thisTransform.position, SquareCollisionRadius);
+
+            if (potentialLandingSquares.Count == 0)
+            {
+                thisTransform.position = thisTransform.parent.position;
+                return;
+            }
+
+            Transform closestSquareTransform = potentialLandingSquares[0].transform;
+            float shortestDistance = (closestSquareTransform.position - thisTransform.position).sqrMagnitude;
+
+            for (int i = 1; i < potentialLandingSquares.Count; i++)
+            {
+                float distance = (potentialLandingSquares[i].transform.position - thisTransform.position).sqrMagnitude;
+                if (distance < shortestDistance)
+                {
+                    shortestDistance = distance;
+                    closestSquareTransform = potentialLandingSquares[i].transform;
+                }
+            }
+
+            Square from = CurrentSquare;
+            Square to = BoardManager.Instance.GetSquareFromTransform(closestSquareTransform);
+
+            GameManager.Instance.OnPieceMoved(from, thisTransform, closestSquareTransform); // visual only
+            NetworkText.Instance.RequestMoveServerRpc(from.ToString(), to.ToString()); // server-validated move
         }
 
-        thisTransform.SetParent(squareGO.transform);
-        thisTransform.localPosition = Vector3.zero;
-
-        VisualPieceMoved?.Invoke(CurrentSquare, thisTransform, squareGO.transform);
     }
-}
 
 
 
